@@ -1,21 +1,40 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+trigger:
+  - main       # or whatever branch you want to trigger on
 
-trigger: none
+pool:
+  vmImage: 'ubuntu-latest'
 
-jobs:
-- job: RunTest
-  workspace:
-    clean: all
-  pool:
-    vmImage: 'ubuntu-latest'
-  steps:
-  - task: Docker@2
-    displayName: Login to ACR
-    inputs:
-      command: login
-      containerRegistry: my-acr
-  - script: |
-      docker run my-registry.azurecr.io/somerepo/rnd-hello:latest 
+steps:
+- checkout: self
+
+# (Optional) ensure your host‐mount directory exists
+- script: |
+    mkdir -p /docker/appdata/firefox
+  displayName: 'Prepare host volume'
+
+# Remove any existing container of the same name
+- script: |
+    if docker ps -a --format '{{.Names}}' | grep -Eq '^firefox$'; then
+      docker rm -f firefox
+    fi
+  displayName: 'Clean up old firefox container'
+
+# Run your Firefox container
+- script: |
+    docker run -d \
+      --name=firefox \
+      -p 5800:5800 \
+      -v /docker/appdata/firefox:/config:rw \
+      jlesage/firefox
+  displayName: 'Start Firefox container'
+
+# (Optional) verify it’s up
+- script: |
+    echo "Waiting for Firefox (VNC) to come up…"
+    sleep 10
+    if ! curl --silent http://localhost:5800 >/dev/null; then
+      echo "ERROR: Firefox container did not start!"
+      exit 1
+    fi
+    echo "🎉 Firefox is listening on port 5800"
+  displayName: 'Smoke-test Firefox container'
